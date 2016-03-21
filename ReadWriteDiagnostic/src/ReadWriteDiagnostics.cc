@@ -151,12 +151,12 @@ namespace Read_Write_Diagnostics {
           auto vfind = wfind->second.find(vi);
           std::string vname = CCTK_VarName(vi);
           if(vfind == wfind->second.end()) {
-            msg << "error: " << routine << "() var="
-              << imp << "::" << vname
-              << " missing from write clause=" << wh_name(v->second);
+            msg << "error: Routine " << routine << "() is missing WRITES: "
+              << imp << "::" << vname << "(" << wh_name(v->second) << ")";
           } else if(v->second != vfind->second) {
-            msg << "error: " << routine << "() var="
-              << imp << "::" << vname
+            msg << "error: Routine " << routine << "() has "
+              << "incorrect region for region of "
+              << "writes clause for " << imp << "::" << vname << ": " 
               << " schedule=" << wh_name(vfind->second)
               << " observed=" << wh_name(v->second);
           }
