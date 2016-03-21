@@ -1,0 +1,11 @@
+# Schedule definitions for thorn ReadWriteDiagnostic
+
+schedule RDWR_AddDiagnosticCalls at CCTK_STARTUP
+{
+  LANG: C
+} "Add diagnostic calls to Carpet"
+
+schedule RDWR_ShowDiagnostics at CCTK_TERMINATE
+{
+  LANG: C
+} "Show errors and warnings resulting from read/write diagnostics"

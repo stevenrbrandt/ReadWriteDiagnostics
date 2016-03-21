@@ -1,0 +1,5 @@
+# Interface definition for thorn ReadWriteDiagnostic
+implements: readwritediagnostic
+inherits:
+
+INCLUDE HEADER: public_rdwr_declare.h in rdwr_declare.h
