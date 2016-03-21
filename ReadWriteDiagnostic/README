@@ -6,4 +6,24 @@ Licence      : LGPL
 
 1. Purpose
 
-not documented
+To detect errors/inconsistencies in read/write schedule declarations.
+
+To use this thorn simply add it to your ActiveThorns list.
+
+ReadWriteDiagnostic uses checksums to identify which grid functions, and which
+regions of grid functions, have been written to within the body of a scheduled
+item. 
+
+If no read/write tags are present in the schedule for a schedule item, this
+thorn will check all grid functions that contain CCTK_REAL. If read/write tags
+are present, only those variables/groups which are identified will be checked.
+
+Inconsistencies between the schedule, and writes that take place during a
+run of the code will be printed out in CCTK_TERMINATE.
+
+To prevent scheduled routines from making use of variables that aren't in the
+read/write list, include the header "rdwr_declare.h" at the top of the source file
+containing the routine. This header will redefine CCTKi_VarDataPtrI to
+RDWR_VarDataPtrI. The function RDWR_VarDataPtrI() will return a null pointer
+for variables outside your scheduled item's read/write lists.  This should
+trigger a segfault if you make use of one of these grid functions.
