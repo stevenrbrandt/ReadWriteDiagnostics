@@ -243,6 +243,17 @@ namespace Read_Write_Diagnostics {
       }
       variables_to_check.insert(i->first);
     }
+    for(auto vp = syncs_s.begin();vp != syncs_s.end();++vp) {
+      std::string r = track_syncs[comp][*vp];
+      if(r == "") {
+        std::ostringstream msg;
+        msg << "warning: Variable " << CCTK_FullName(*vp) <<
+          " (group " << CCTK_GroupNameFromVarI(*vp) << ") does not need to be synced by " << routine;
+        messages.insert(msg.str());
+      } else {
+        track_syncs[comp][*vp] = "";
+      }
+    }
     // No read-write clauses. Check everything.
     if(variables_to_check.size()==0) {
       for(int vi=0;vi < CCTK_NumVars();vi++) {
