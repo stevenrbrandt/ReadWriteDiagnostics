@@ -7,6 +7,7 @@
 #include <ScheduleWrapper.hh>
 
 namespace Read_Write_Diagnostics {
+  extern "C" int GetRefinementLevel(const cGH*);
 
   #define WH_EVERYWHERE 0x11
   #define WH_INTERIOR   0x01
@@ -48,7 +49,8 @@ namespace Read_Write_Diagnostics {
 
   // Writes, Reads, Syncs
   std::map<std::string,std::map<int,int> > wclauses, rclauses;
-  std::map<std::string,std::set<int>> syncs;
+  std::map<std::string,std::set<int> > syncs;
+  std::map<int,std::map<int,std::string> > track_syncs;
 
   void compute_clauses(const int num_strings,const char **strings,std::map<int,int>& routine_m) {
     for(int i=0;i< num_strings; ++i) {
@@ -169,11 +171,20 @@ namespace Read_Write_Diagnostics {
     }
   }
 
-  cksum_t compute_cksum(const cGH *cctkGH,unsigned long *ldata) {
+  cksum_t compute_cksum(const cGH *cctkGH,unsigned long *ldata,int vi) {
     const int *cctk_nghostzones = cctkGH->cctk_nghostzones;
     const int *cctk_lsh = cctkGH->cctk_lsh;
     const int bytes = sizeof(unsigned long);
     cksum_t c;
+    #if 0
+    // When is the data supposed to become valid?
+    if (CCTK_IsFunctionAliased("Accelerator_RequireValidData")) {
+      bool on_device = 0;
+      int rl = GetRefinementLevel(cctkGH);
+      int tl = 0;
+      Accelerator_RequireValidData(cctkGH, &vi, &rl, &tl, 1, on_device);
+    }
+    #endif
     for(int k=0;k<cctk_lsh[2];k++) {
       const bool inz = (cctk_nghostzones[2] <= k && k < cctk_lsh[2]-cctk_nghostzones[2]);
       for(int j=0;j<cctk_lsh[1];j++) {
@@ -206,16 +217,33 @@ namespace Read_Write_Diagnostics {
 
     init_function(attribute);
 
+    int comp = GetRefinementLevel(cctkGH) > 0 ? 1+GetLocalComponent(cctkGH) : 0;
+
     std::set<int> variables_to_check;
     std::map<int,int>& reads_m = rclauses[routine];
+    std::set<int> syncs_s = syncs[routine];
     for(auto i=reads_m.begin();i != reads_m.end();++i) {
+      if(i->second == (WH_INTERIOR|WH_EXTERIOR)) {
+        std::string r = track_syncs[comp][i->first];
+        if(r != "") {
+          std::ostringstream msg;
+          msg << "error: Variable " << CCTK_FullName(i->first) <<
+            " (group " << CCTK_GroupNameFromVarI(i->first) << ") needs to be synced by " << r;
+          messages.insert(msg.str());
+        }
+      }
       variables_to_check.insert(i->first);
     }
-    std::map<int,int>& writes_m = rclauses[routine];
+    std::map<int,int>& writes_m = wclauses[routine];
     for(auto i=writes_m.begin();i != writes_m.end();++i) {
+      if(i->second == WH_INTERIOR) {
+        track_syncs[comp][i->first]=routine;
+      } else if(i->second == (WH_INTERIOR|WH_EXTERIOR)) {
+        track_syncs[comp][i->first]="";
+      }
       variables_to_check.insert(i->first);
     }
-    // No read-write clause. Check everything.
+    // No read-write clauses. Check everything.
     if(variables_to_check.size()==0) {
       for(int vi=0;vi < CCTK_NumVars();vi++) {
         variables_to_check.insert(vi);
@@ -229,7 +257,7 @@ namespace Read_Write_Diagnostics {
        int type = CCTK_GroupTypeFromVarI(vi);
        if(type == CCTK_GF && CCTK_VarTypeSize(CCTK_VarTypeI(vi)) == sizeof(long)) {
        unsigned long *ldata = (unsigned long*)data;
-       cksum_t c = compute_cksum(cctkGH,ldata);
+       cksum_t c = compute_cksum(cctkGH,ldata,vi);
        cksums[vi] = c;
       }
     }
@@ -246,7 +274,7 @@ namespace Read_Write_Diagnostics {
     for(auto i=reads_m.begin();i != reads_m.end();++i) {
       variables_to_check.insert(i->first);
     }
-    std::map<int,int>& writes_m = rclauses[routine];
+    std::map<int,int>& writes_m = wclauses[routine];
     for(auto i=writes_m.begin();i != writes_m.end();++i) {
       variables_to_check.insert(i->first);
     }
@@ -264,7 +292,7 @@ namespace Read_Write_Diagnostics {
        int type = CCTK_GroupTypeFromVarI(vi);
        if(type == CCTK_GF && CCTK_VarTypeSize(CCTK_VarTypeI(vi)) == sizeof(long)) {
        unsigned long *ldata = (unsigned long*)data;
-       cksum_t c = compute_cksum(cctkGH,ldata);
+       cksum_t c = compute_cksum(cctkGH,ldata,vi);
        cksum_t cn = cksums[vi];
         if(cn != c) {
           int where=0;
@@ -315,9 +343,6 @@ namespace Read_Write_Diagnostics {
   }
 
   extern "C" int RDWR_AddDiagnosticCalls() {
-    //auto *cd = new call_data;
-    //AddPreCallFunction((hook_function)pre_call,cd);
-    //AddPostCallFunction((hook_function)post_call,cd);
     Carpet::Carpet_RegisterScheduleWrapper(pre_call,post_call);
     std::cout << "Hooks added" << std::endl;
     return 0;
