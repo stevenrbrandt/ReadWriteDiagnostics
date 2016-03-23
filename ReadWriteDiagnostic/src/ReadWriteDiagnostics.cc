@@ -5,8 +5,15 @@
 #include <cstring>
 #include <string>
 #include <ScheduleWrapper.hh>
+#include <cctk_Sync.h>
 
 namespace Read_Write_Diagnostics {
+  struct VarName {
+    const char *name;
+    VarName(int vi) : name(CCTK_FullName(vi)) {}
+    ~VarName() { delete name; }
+    operator const char *() const { return name; }
+  };
   extern "C" int GetRefinementLevel(const cGH*);
 
   #define WH_EVERYWHERE 0x11
@@ -108,6 +115,31 @@ namespace Read_Write_Diagnostics {
   }
 
   std::string routine;
+
+  void init_MoL() {
+    // Special code for MoL
+    bool init = true;
+    if(!init) return;
+    init = false;
+    std::string add = "MoL::MoL_Add";
+    std::map<int,int>& writes_add = wclauses[add];
+    std::string copy = "MoL::MoL_InitialCopy";
+    std::map<int,int>& writes_copy = wclauses[copy];
+    std::string rhs = "MoL::MoL_InitRHS";
+    std::map<int,int>& writes_rhs = wclauses[rhs];
+    int nv = CCTK_NumVars();
+    for(int vi=0;vi<nv;vi++) {
+      int type = CCTK_GroupTypeFromVarI(vi);
+      if(type == CCTK_GF && CCTK_VarTypeSize(CCTK_VarTypeI(vi)) == sizeof(CCTK_REAL)) {
+        int rhsi = MoLQueryEvolvedRHS(vi);
+        if(rhsi >= 0) {
+          writes_add[vi] = WH_INTERIOR;
+          writes_copy[vi] = WH_INTERIOR;
+          writes_rhs[rhsi] = WH_INTERIOR;
+        }
+      }
+    }
+  }
 
   void init_function(const cFunctionData *attribute) {
     if(wclauses.find(routine) != wclauses.end())
@@ -211,6 +243,10 @@ namespace Read_Write_Diagnostics {
     const cGH *cctkGH = (const cGH *)arg1;
     const cFunctionData *attribute = (const cFunctionData *)arg3;
 
+    if(routine == "MoL::MoL_Add") {
+      init_MoL();
+    }
+
     routine = attribute->thorn;
     routine += "::";
     routine += attribute->routine;
@@ -227,9 +263,15 @@ namespace Read_Write_Diagnostics {
         std::string r = track_syncs[comp][i->first];
         if(r != "") {
           std::ostringstream msg;
-          msg << "error: Variable " << CCTK_FullName(i->first) <<
-            " (group " << CCTK_GroupNameFromVarI(i->first) << ") needs to be synced by " << r;
+          VarName vn(i->first);
+          msg << "error: in routine " << routine << ". Variable " << vn <<
+            " (group " << CCTK_GroupNameFromVarI(i->first) << ") needs to be synced by " << r << " (calling sync)";
           messages.insert(msg.str());
+
+          // Fix syncs
+          int gi = CCTK_GroupIndexFromVarI(i->first);
+          CCTK_SyncGroupsI(cctkGH,1,&gi);
+          track_syncs[comp][i->first]="";
         }
       }
       variables_to_check.insert(i->first);
@@ -247,7 +289,8 @@ namespace Read_Write_Diagnostics {
       std::string r = track_syncs[comp][*vp];
       if(r == "") {
         std::ostringstream msg;
-        msg << "warning: Variable " << CCTK_FullName(*vp) <<
+        VarName vn(*vp);
+        msg << "warning: Variable " << vn <<
           " (group " << CCTK_GroupNameFromVarI(*vp) << ") does not need to be synced by " << routine;
         messages.insert(msg.str());
       } else {
@@ -266,7 +309,7 @@ namespace Read_Write_Diagnostics {
        void *data = CCTK_VarDataPtrI(cctkGH,0,vi);
        if(data == 0) continue;
        int type = CCTK_GroupTypeFromVarI(vi);
-       if(type == CCTK_GF && CCTK_VarTypeSize(CCTK_VarTypeI(vi)) == sizeof(long)) {
+       if(type == CCTK_GF && CCTK_VarTypeSize(CCTK_VarTypeI(vi)) == sizeof(CCTK_REAL)) {
        unsigned long *ldata = (unsigned long*)data;
        cksum_t c = compute_cksum(cctkGH,ldata,vi);
        cksums[vi] = c;
@@ -301,7 +344,7 @@ namespace Read_Write_Diagnostics {
        void *data = CCTK_VarDataPtrI(cctkGH,0,vi);
        if(data == 0) continue;
        int type = CCTK_GroupTypeFromVarI(vi);
-       if(type == CCTK_GF && CCTK_VarTypeSize(CCTK_VarTypeI(vi)) == sizeof(long)) {
+       if(type == CCTK_GF && CCTK_VarTypeSize(CCTK_VarTypeI(vi)) == sizeof(CCTK_REAL)) {
        unsigned long *ldata = (unsigned long*)data;
        cksum_t c = compute_cksum(cctkGH,ldata,vi);
        cksum_t cn = cksums[vi];
@@ -333,7 +376,7 @@ namespace Read_Write_Diagnostics {
       found = true;
     }
     int type = CCTK_GroupTypeFromVarI(vi);
-    if(type == CCTK_GF && CCTK_VarTypeSize(CCTK_VarTypeI(vi)) == sizeof(long)) {
+    if(type == CCTK_GF && CCTK_VarTypeSize(CCTK_VarTypeI(vi)) == sizeof(CCTK_REAL)) {
       ; // we only check grid functions of this type
     } else {
       found = true;
