@@ -59,6 +59,8 @@ namespace Read_Write_Diagnostics {
   std::map<std::string,std::set<int> > syncs;
   std::map<int,std::map<int,std::string> > track_syncs;
 
+  std::string routine;
+
   void compute_clauses(const int num_strings,const char **strings,std::map<int,int>& routine_m) {
     for(int i=0;i< num_strings; ++i) {
 
@@ -67,6 +69,10 @@ namespace Read_Write_Diagnostics {
       const char *openp  = strchr(clause,'(');
       const char *closep = strchr(clause,')');
       const char *end_impl = strchr(clause,':');
+      if(end_impl == 0) {
+        std::cerr << "bad str=" << strings[i] << std::endl;
+      }
+      assert(end_impl != 0);
       std::string where, str;
       int where_val=0;
       if(openp != 0) {
@@ -89,18 +95,17 @@ namespace Read_Write_Diagnostics {
           assert(false);
         }
       } else {
+        str = clause;
         where_val = WH_EVERYWHERE;
       }
 
       int vi = CCTK_VarIndex(str.c_str());
       if(vi >= 0) {
         routine_m[vi] = where_val;
-        std::cout << " FOUND WRITE FOR " << CCTK_VarName(vi) << "=" << where << std::endl;
       } else {
         // If looking up a specific variable failed, then
         // we lookup everything on the group.
         int gi = CCTK_GroupIndex(str.c_str());
-        std::cout << " FOUND WRITE FOR " << CCTK_GroupName(gi) << "=" << where << std::endl;
         if(gi >= 0) {
           int i0 = CCTK_FirstVarIndexI(gi);
           int iN = i0+CCTK_NumVarsInGroupI(gi);
@@ -108,25 +113,24 @@ namespace Read_Write_Diagnostics {
             routine_m[vi] = where_val;
           }
         } else {
-          std::cout << "error: Could not find (" << str << ")" << std::endl;
+          std::cerr << "error: Could not find (" << str << ")" << std::endl;
         }
       }
     }
   }
 
-  std::string routine;
-
   void init_MoL() {
     // Special code for MoL
     bool init = true;
     if(!init) return;
-    init = false;
     std::string add = "MoL::MoL_Add";
     std::map<int,int>& writes_add = wclauses[add];
     std::string copy = "MoL::MoL_InitialCopy";
     std::map<int,int>& writes_copy = wclauses[copy];
     std::string rhs = "MoL::MoL_InitRHS";
     std::map<int,int>& writes_rhs = wclauses[rhs];
+    if(routine != add && routine != copy && routine != rhs)
+      return;
     int nv = CCTK_NumVars();
     for(int vi=0;vi<nv;vi++) {
       int type = CCTK_GroupTypeFromVarI(vi);
@@ -136,6 +140,7 @@ namespace Read_Write_Diagnostics {
           writes_add[vi] = WH_INTERIOR;
           writes_copy[vi] = WH_INTERIOR;
           writes_rhs[rhsi] = WH_INTERIOR;
+          init = false;
         }
       }
     }
@@ -150,7 +155,6 @@ namespace Read_Write_Diagnostics {
       attribute->n_WritesClauses,
       attribute->WritesClauses,
       writes_m);
-
     std::map<int,int>& reads_m = rclauses[routine];
     compute_clauses(
       attribute->n_ReadsClauses,
@@ -176,21 +180,27 @@ namespace Read_Write_Diagnostics {
       const std::string& routine = it->first;
       for(auto v=it->second.begin();v != it->second.end();++v) {
         int vi = v->first;
-        std::string imp = CCTK_ImpFromVarI(vi);
+        //std::string imp = CCTK_ImpFromVarI(vi);
         auto wfind = wclauses.find(routine);
         std::ostringstream msg;
         if(wfind == wclauses.end()) {
           msg << "error: " << routine << "() has no write clauses";
         } else {
           auto vfind = wfind->second.find(vi);
-          std::string vname = CCTK_VarName(vi);
+          VarName vn(vi);
           if(vfind == wfind->second.end()) {
             msg << "error: Routine " << routine << "() is missing WRITES: "
-              << imp << "::" << vname << "(" << wh_name(v->second) << ")";
+              << vn << "(" << wh_name(v->second) << ") ";
+            msg << "id=" << vi << " ";
+            msg << "has=(";
+            for(auto m=wfind->second.begin();m != wfind->second.end();++m) {
+              msg << m->first << " ";
+            }
+            msg << ")";
           } else if(v->second != vfind->second) {
             msg << "error: Routine " << routine << "() has "
               << "incorrect region for region of "
-              << "writes clause for " << imp << "::" << vname << ": " 
+              << "writes clause for " << vn << ": " 
               << " schedule=" << wh_name(vfind->second)
               << " observed=" << wh_name(v->second);
           }
@@ -243,9 +253,7 @@ namespace Read_Write_Diagnostics {
     const cGH *cctkGH = (const cGH *)arg1;
     const cFunctionData *attribute = (const cFunctionData *)arg3;
 
-    if(routine == "MoL::MoL_Add") {
-      init_MoL();
-    }
+    init_MoL();
 
     routine = attribute->thorn;
     routine += "::";
@@ -269,9 +277,11 @@ namespace Read_Write_Diagnostics {
           messages.insert(msg.str());
 
           // Fix syncs
+          #if 0
           int gi = CCTK_GroupIndexFromVarI(i->first);
           CCTK_SyncGroupsI(cctkGH,1,&gi);
           track_syncs[comp][i->first]="";
+          #endif
         }
       }
       variables_to_check.insert(i->first);
@@ -389,9 +399,9 @@ namespace Read_Write_Diagnostics {
   }
 
   extern "C" int RDWR_ShowDiagnostics() {
-    std::cout << "RDWR Diagnostics:" << std::endl;
+    std::cerr << "RDWR Diagnostics:" << std::endl;
     for(auto i=messages.begin();i != messages.end();++i) {
-      std::cout << *i << std::endl;
+      std::cerr << *i << std::endl;
     }
     return 0;
   }
