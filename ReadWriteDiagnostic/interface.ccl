@@ -3,3 +3,19 @@ implements: readwritediagnostic
 inherits:
 
 INCLUDE HEADER: public_rdwr_declare.h in rdwr_declare.h
+
+CCTK_INT FUNCTION Accelerator_RequireValidData          \
+  (CCTK_POINTER_TO_CONST IN cctkGH,                     \
+   CCTK_INT ARRAY        IN variables,                  \
+   CCTK_INT ARRAY        IN rls,                        \
+   CCTK_INT ARRAY        IN tls,                        \
+   CCTK_INT              IN nvariables,                 \
+   CCTK_INT              IN on_device)
+USES FUNCTION Accelerator_RequireValidData
+
+CCTK_INT FUNCTION GetLocalComponent                     \
+        (CCTK_POINTER_TO_CONST IN cctkGH)
+USES FUNCTION GetLocalComponent 
+
+CCTK_INT FUNCTION MoLQueryEvolvedRHS (CCTK_INT IN EvolvedIndex)
+REQUIRES FUNCTION MoLQueryEvolvedRHS

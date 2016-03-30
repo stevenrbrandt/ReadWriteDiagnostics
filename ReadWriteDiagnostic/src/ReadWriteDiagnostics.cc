@@ -273,7 +273,7 @@ namespace Read_Write_Diagnostics {
           std::ostringstream msg;
           VarName vn(i->first);
           msg << "error: in routine " << routine << ". Variable " << vn <<
-            " (group " << CCTK_GroupNameFromVarI(i->first) << ") needs to be synced by " << r << " (calling sync)";
+            " (group " << CCTK_GroupNameFromVarI(i->first) << ") needs to be synced by " << r;
           messages.insert(msg.str());
 
           // Fix syncs
@@ -375,6 +375,7 @@ namespace Read_Write_Diagnostics {
   extern "C" void *RDWR_VarDataPtrI(const cGH *gh,int tl,int vi) {
     bool found = false;
     std::map<int,int>& reads_m = rclauses[routine];
+    int read_mask = 0;
     if(reads_m.find(vi) == reads_m.end()) {
       std::map<int,int>& writes_m = wclauses[routine];
       if(writes_m.find(vi) == writes_m.end()) {
@@ -383,6 +384,7 @@ namespace Read_Write_Diagnostics {
         found = true;
       }
     } else {
+      read_mask = reads_m[vi];
       found = true;
     }
     int type = CCTK_GroupTypeFromVarI(vi);
@@ -392,7 +394,7 @@ namespace Read_Write_Diagnostics {
       found = true;
     }
     if(found) {
-      return CCTK_VarDataPtrI(gh,tl,vi);
+      return (CCTK_REAL*)CCTK_VarDataPtrI(gh,tl,vi);
     } else {
       return 0;
     }
