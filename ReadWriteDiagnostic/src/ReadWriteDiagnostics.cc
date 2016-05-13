@@ -9,9 +9,9 @@
 
 namespace Read_Write_Diagnostics {
   struct VarName {
-    const char *name;
+    char *name;
     VarName(int vi) : name(CCTK_FullName(vi)) {}
-    ~VarName() { delete name; }
+    ~VarName() { free(name); }
     operator const char *() const { return name; }
   };
   extern "C" int GetRefinementLevel(const cGH*);
@@ -375,7 +375,7 @@ namespace Read_Write_Diagnostics {
   extern "C" void *RDWR_VarDataPtrI(const cGH *gh,int tl,int vi) {
     bool found = false;
     std::map<int,int>& reads_m = rclauses[routine];
-    int read_mask = 0;
+    //int read_mask = 0;
     if(reads_m.find(vi) == reads_m.end()) {
       std::map<int,int>& writes_m = wclauses[routine];
       if(writes_m.find(vi) == writes_m.end()) {
@@ -384,7 +384,7 @@ namespace Read_Write_Diagnostics {
         found = true;
       }
     } else {
-      read_mask = reads_m[vi];
+      //read_mask = reads_m[vi];
       found = true;
     }
     int type = CCTK_GroupTypeFromVarI(vi);
@@ -400,7 +400,7 @@ namespace Read_Write_Diagnostics {
     }
   }
 
-  extern "C" int RDWR_ShowDiagnostics() {
+  extern "C" int RDWR_ShowDiagnostics(void) {
     std::cerr << "RDWR Diagnostics:" << std::endl;
     for(auto i=messages.begin();i != messages.end();++i) {
       std::cerr << *i << std::endl;
@@ -408,7 +408,7 @@ namespace Read_Write_Diagnostics {
     return 0;
   }
 
-  extern "C" int RDWR_AddDiagnosticCalls() {
+  extern "C" int RDWR_AddDiagnosticCalls(void) {
     Carpet::Carpet_RegisterScheduleWrapper(pre_call,post_call);
     std::cout << "Hooks added" << std::endl;
     return 0;
