@@ -1,0 +1,20 @@
+# Parameter definitions for thorn Trace
+CCTK_INT trace_xcoord "The position on the grid"
+{
+  *:*		:: "Anything non negative. Added to by other thorns."
+} 0
+
+CCTK_INT trace_ycoord "The position on the grid"
+{
+  *:*		:: "Anything non negative. Added to by other thorns."
+} 0
+
+CCTK_INT trace_zcoord "The position on the grid"
+{
+  *:*		:: "Anything non negative. Added to by other thorns."
+} 0
+
+STRING trace_varname "The variable to track"
+{
+  ".*"          :: "Should contain the Alpha and Beta arrays, and the number of intermediate steps"
+} ""
