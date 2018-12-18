@@ -17,5 +17,9 @@ CCTK_INT FUNCTION GetLocalComponent                     \
         (CCTK_POINTER_TO_CONST IN cctkGH)
 USES FUNCTION GetLocalComponent 
 
+CCTK_INT FUNCTION GetMap
+        (CCTK_POINTER_TO_CONST IN cctkGH)
+USES FUNCTION GetMap
+
 CCTK_INT FUNCTION MoLQueryEvolvedRHS (CCTK_INT IN EvolvedIndex)
 REQUIRES FUNCTION MoLQueryEvolvedRHS

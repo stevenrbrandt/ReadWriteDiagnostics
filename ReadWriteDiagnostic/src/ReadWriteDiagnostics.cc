@@ -191,12 +191,14 @@ namespace Read_Write_Diagnostics {
           if(vfind == wfind->second.end()) {
             msg << "error: Routine " << routine << "() is missing WRITES: "
               << vn << "(" << wh_name(v->second) << ") ";
+            /*
             msg << "id=" << vi << " ";
             msg << "has=(";
             for(auto m=wfind->second.begin();m != wfind->second.end();++m) {
               msg << m->first << " ";
             }
             msg << ")";
+            */
           } else if(v->second != vfind->second) {
             msg << "error: Routine " << routine << "() has "
               << "incorrect region for region of "
@@ -206,7 +208,10 @@ namespace Read_Write_Diagnostics {
           }
           std::string smsg = msg.str();
           if(smsg.size() > 0) {
-            messages.insert(smsg);
+            if(messages.find(smsg) == messages.end()) {
+              messages.insert(smsg);
+              std::cout << smsg << std::endl;
+            }
           }
         }
       }
@@ -247,11 +252,16 @@ namespace Read_Write_Diagnostics {
     return c;
   }
 
-  //int pre_call(const cGH *cctkGH,void *func,const cFunctionData *attribute,call_data *cd_) {
-  int pre_call(const void *arg1,void *arg2,void *arg3,void *arg4) {
+  extern "C" int RDWR_pre_call(const cGH *arg1,void *arg2,const cFunctionData *arg3,void *arg4);
+  int RDWR_pre_call(const cGH *arg1,void *arg2,const cFunctionData *arg3,void *arg4)
+  {
 
     const cGH *cctkGH = (const cGH *)arg1;
+    if(GetMap(cctkGH) < 0)
+      return 0;
+
     const cFunctionData *attribute = (const cFunctionData *)arg3;
+    std::cout << "/== " << attribute->thorn << "::" << attribute->routine << "\n";
 
     init_MoL();
 
@@ -328,10 +338,11 @@ namespace Read_Write_Diagnostics {
     return 0;
   }
 
-  //int post_call(const cGH *cctkGH,void *func,const cFunctionData * attribute,call_data *cd_) {
-  int post_call(const void *arg1,void *arg2,void *arg3,void *arg4) {
+  extern "C" int RDWR_post_call(const cGH *arg1,void *arg2,const cFunctionData * arge,void *arg4);
+  int RDWR_post_call(const cGH *arg1,void *arg2,const cFunctionData * arg3,void *arg4)
+  {
     const cGH *cctkGH = (const cGH *)arg1;
-    //const cFunctionData *attribute = (const cFunctionData *)arg3;
+    const cFunctionData *attribute = (const cFunctionData *)arg3;
 
     std::set<int> variables_to_check;
     std::map<int,int>& reads_m = rclauses[routine];
@@ -369,6 +380,7 @@ namespace Read_Write_Diagnostics {
       }
     }
     wclause_diagnostic();
+    std::cout << "\\== " << attribute->thorn << "::" << attribute->routine << "\n";
     return 0;
   }
 
@@ -409,7 +421,7 @@ namespace Read_Write_Diagnostics {
   }
 
   extern "C" int RDWR_AddDiagnosticCalls(void) {
-    Carpet::Carpet_RegisterScheduleWrapper(pre_call,post_call);
+    Carpet::Carpet_RegisterScheduleWrapper((Carpet::func)RDWR_pre_call,(Carpet::func)RDWR_post_call);
     std::cout << "Hooks added" << std::endl;
     return 0;
   }
