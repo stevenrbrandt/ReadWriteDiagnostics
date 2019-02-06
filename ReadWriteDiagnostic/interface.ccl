@@ -21,5 +21,14 @@ CCTK_INT FUNCTION GetMap
         (CCTK_POINTER_TO_CONST IN cctkGH)
 USES FUNCTION GetMap
 
+CCTK_INT FUNCTION Carpet_GetValidRegion(CCTK_INT IN vi,
+                                        CCTK_INT IN tl)
+USES FUNCTION Carpet_GetValidRegion
+
 CCTK_INT FUNCTION MoLQueryEvolvedRHS (CCTK_INT IN EvolvedIndex)
 REQUIRES FUNCTION MoLQueryEvolvedRHS
+
+void FUNCTION Carpet_SetValidRegion(CCTK_INT IN vi,
+                                        CCTK_INT IN tl,
+                                        CCTK_INT IN wh)
+USES FUNCTION Carpet_SetValidRegion

@@ -1,1 +1,6 @@
 # Parameter definitions for thorn ReadWriteDiagnostic
+ 
+STRING zero_init "GF's to initialize to zero"
+{
+  "^\s*(\w+::\w+(\s+\w+::\w+)*)?\s*$" :: "GF's to initialize to zero"
+} ""

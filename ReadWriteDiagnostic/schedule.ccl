@@ -9,3 +9,14 @@ schedule RDWR_ShowDiagnostics at CCTK_TERMINATE
 {
   LANG: C
 } "Show errors and warnings resulting from read/write diagnostics"
+
+schedule RDWR_ZeroInit_Storage at CCTK_INITIAL
+{
+  LANG: C
+  OPTIONS: global
+} "Initialize some GF's to all zero"
+
+schedule RDWR_ZeroInit at CCTK_INITIAL
+{
+  LANG: C
+} "Initialize some GF's to all zero"

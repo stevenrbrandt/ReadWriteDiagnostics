@@ -6,6 +6,13 @@
 #include <string>
 #include <ScheduleWrapper.hh>
 #include <cctk_Sync.h>
+#include <cctk_Arguments.h>
+#include <cctk_Parameters.h>
+#include <sstream>
+#include "PreSync.h"
+
+extern "C" void CCTK_Checked_called(), CCTK_Checked_reset();
+extern "C" int CCTK_Checked_get();
 
 namespace Read_Write_Diagnostics {
   struct VarName {
@@ -16,9 +23,15 @@ namespace Read_Write_Diagnostics {
   };
   extern "C" int GetRefinementLevel(const cGH*);
 
-  #define WH_EVERYWHERE 0x11
-  #define WH_INTERIOR   0x01
-  #define WH_EXTERIOR   0x10
+//  #define WH_EVERYWHERE 0x11
+//  #define WH_INTERIOR   0x01
+//  #define WH_EXTERIOR   0x10
+#define WH_EVERYWHERE          0x7
+#define WH_INTERIOR            0x4
+#define WH_BOUNDARY            0x2 /* Describes B+G cells */
+#define WH_GHOSTS              0x1
+#define WH_NOWHERE             0x0
+#define WH_EXTERIOR            0x3
 
   struct cksum_t {
     unsigned long in, out;
@@ -38,12 +51,22 @@ namespace Read_Write_Diagnostics {
     return out << std::hex << c.in << ":" << c.out << std::dec;
   }
   inline const char *wh_name(int n) {
-    if(n == WH_EVERYWHERE)
+    if(n == WH_EVERYWHERE) 
       return "everywhere";
     if(n == WH_INTERIOR)
       return "interior";
     if(n == WH_EXTERIOR)
       return "exterior";
+    if(n == WH_GHOSTS)
+      return "ghosts";
+    if(n == WH_BOUNDARY)
+      return "boundary";
+    if(n == WH_NOWHERE)
+      return "nowhere";
+    if(n == (WH_INTERIOR|WH_BOUNDARY))
+      return "interior+boundary";
+    if(n == (WH_INTERIOR|WH_GHOSTS))
+      return "interior+ghosts";
     return "?";
   }
   inline void tolower(std::string& s) {
@@ -189,8 +212,13 @@ namespace Read_Write_Diagnostics {
           auto vfind = wfind->second.find(vi);
           VarName vn(vi);
           if(vfind == wfind->second.end()) {
-            msg << "error: Routine " << routine << "() is missing WRITES: "
-              << vn << "(" << wh_name(v->second) << ") ";
+            int where = Carpet_GetValidRegion(vi,0);
+            int missing = v->second & ~where;
+            missing &= ~WH_GHOSTS;
+            if(missing != 0) {
+              msg << "error: Routine " << routine << "() is missing WRITES: "
+                << vn << "(" << wh_name(missing) << ") ";
+            }
             /*
             msg << "id=" << vi << " ";
             msg << "has=(";
@@ -255,10 +283,13 @@ namespace Read_Write_Diagnostics {
   extern "C" int RDWR_pre_call(const cGH *arg1,void *arg2,const cFunctionData *arg3,void *arg4);
   int RDWR_pre_call(const cGH *arg1,void *arg2,const cFunctionData *arg3,void *arg4)
   {
+    CCTK_Checked_reset();
 
     const cGH *cctkGH = (const cGH *)arg1;
-    if(GetMap(cctkGH) < 0)
+    if(GetMap(cctkGH) < 0) {
+      CCTK_Checked_called();
       return 0;
+    }
 
     const cFunctionData *attribute = (const cFunctionData *)arg3;
     std::cout << "/== " << attribute->thorn << "::" << attribute->routine << "\n";
@@ -343,6 +374,10 @@ namespace Read_Write_Diagnostics {
   {
     const cGH *cctkGH = (const cGH *)arg1;
     const cFunctionData *attribute = (const cFunctionData *)arg3;
+    if(CCTK_Checked_get() == 0) {
+      std::cout << "xxxy: No check called for " << attribute->thorn << "::" << attribute->routine << "\n";
+    }
+    CCTK_Checked_reset();
 
     std::set<int> variables_to_check;
     std::map<int,int>& reads_m = rclauses[routine];
@@ -425,4 +460,94 @@ namespace Read_Write_Diagnostics {
     std::cout << "Hooks added" << std::endl;
     return 0;
   }
+
+  int is_white(char c) {
+    return c == ' ' || c == '\n' || c == '\t' || c == '\r';
+  }
+
+  void fill_vec(const char *in,std::vector<std::string>& vec)
+  {
+    int n = strlen(in);
+    int i = 0;
+    std::string out;
+    while(i<n) {
+      out = "";
+      while(i < n && is_white(in[i])) {
+        i++;
+      }
+      while(i < n && !is_white(in[i])) {
+        out.push_back(in[i]);
+        i++;
+      }
+      if(out.size() > 0) {
+        vec.push_back(out);
+      }
+    }
+  }
+
+  extern "C" int RDWR_ZeroInit_Storage(CCTK_ARGUMENTS) {
+    DECLARE_CCTK_ARGUMENTS;
+    DECLARE_CCTK_PARAMETERS;
+    std::vector<std::string> vec{};
+    fill_vec(zero_init,vec);
+    for(std::string out : vec)
+    {
+      int var = CCTK_VarIndex(out.c_str());
+      if(var < 0) {
+        std::cout << "Zero_init skips (" << out << ") no such variable.\n";
+        continue;
+      }
+      int group = CCTK_GroupIndexFromVarI(var);
+      if(group >= 0) {
+          std::cout << "Turn on group storage\n";
+          CCTK_EnableGroupStorageI(cctkGH,group);
+      }
+    }
+    return 0;
+  } // end
+
+  extern "C" int RDWR_ZeroInit(CCTK_ARGUMENTS) {
+    DECLARE_CCTK_ARGUMENTS;
+    DECLARE_CCTK_PARAMETERS;
+    std::vector<std::string> vec{};
+    fill_vec(zero_init,vec);
+    for(std::string out : vec)
+    {
+      int var = CCTK_VarIndex(out.c_str());
+      if(var < 0) {
+        std::cout << "Zero_init skips " << out << " no such variable.\n";
+        continue;
+      }
+      void *data = CCTK_VarDataPtrI(cctkGH,0,var);
+      if(data == nullptr) {
+        int group = CCTK_GroupIndexFromVarI(var);
+        if(group >= 0) {
+          std::cout << "Turn on group storage\n";
+          CCTK_EnableGroupStorageI(cctkGH,group);
+        }
+      }
+      data = CCTK_VarDataPtrI(cctkGH,0,var);
+      if(data == 0) {
+        std::cout << "Zero_init skips " << out << " nullptr.\n";
+        continue;
+      }
+      int type = CCTK_GroupTypeFromVarI(var);
+      if(type == CCTK_GF && CCTK_VarTypeSize(CCTK_VarTypeI(var)) == sizeof(CCTK_REAL)) {
+        CCTK_REAL *rdata = (CCTK_REAL *)data;
+        for(int k=0;k<cctk_lsh[2];k++) {
+          for(int j=0;j<cctk_lsh[1];j++) {
+            for(int i=0;i<cctk_lsh[0];i++) {
+              int cc = CCTK_GFINDEX3D(cctkGH,i,j,k);
+              rdata[cc] = i;
+            }
+          }
+        }
+        Carpet_SetValidRegion(var,0,WH_EVERYWHERE);
+        std::cout << "Zero_init of " << out << " to Everywhere\n";
+      }
+    }
+    return 0;
+  } // end
+
 }
+
