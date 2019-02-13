@@ -9,6 +9,8 @@
 #include <cctk_Arguments.h>
 #include <cctk_Parameters.h>
 #include <sstream>
+#include <stdlib.h>
+
 #include "PreSync.h"
 
 extern "C" void CCTK_Checked_called(), CCTK_Checked_reset();
@@ -23,6 +25,7 @@ namespace Read_Write_Diagnostics {
   };
   extern "C" int GetRefinementLevel(const cGH*);
 
+#if 0
 //  #define WH_EVERYWHERE 0x11
 //  #define WH_INTERIOR   0x01
 //  #define WH_EXTERIOR   0x10
@@ -32,6 +35,39 @@ namespace Read_Write_Diagnostics {
 #define WH_GHOSTS              0x1
 #define WH_NOWHERE             0x0
 #define WH_EXTERIOR            0x3
+#endif
+  void traceVars(const cGH *cctkGH) {;
+    const char *ixs = getenv("RDWR_DEBUG_INDEXES");
+    int xv=0,yv=0,zv=0;
+    if(ixs != 0) {
+      std::istringstream cns{ixs};
+      cns >> xv >> yv >> zv;
+    }
+
+    const char *dbv = getenv("RDWR_DEBUG_VARS");
+    if(dbv == 0)
+      return;
+  
+    std::istringstream ins{dbv};
+    while(ins.good()) {
+      std::string vname;
+      ins >> vname;
+      //const char *vname = "ADMBASE::gxx";
+      int vi_ = CCTK_VarIndex(vname.c_str());
+      assert(vi_ >= 0);
+      int cc = CCTK_GFINDEX3D(cctkGH,xv,yv,zv);
+      CCTK_REAL *ptr = (CCTK_REAL*)CCTK_VarDataPtrI(cctkGH,0,vi_);
+      int wh = Carpet_GetValidRegion(vi_,0);
+      std::string whs;
+      if((wh & WH_INTERIOR) != 0) whs += "I";
+      if((wh & WH_BOUNDARY) != 0) whs += "B";
+      if((wh & WH_GHOSTS) != 0) whs += "G";
+      if(ptr == 0)
+        std::cout << "   " << vname << " := ??? (" << whs << ")" << std::endl;
+      else
+        std::cout << "   " << vname << " := " << ptr[cc] << " (" << whs << ")" << std::endl;
+    }
+  }
 
   struct cksum_t {
     unsigned long in, out;
@@ -285,14 +321,14 @@ namespace Read_Write_Diagnostics {
   {
     CCTK_Checked_reset();
 
+    const cFunctionData *attribute = (const cFunctionData *)arg3;
+    std::cout << "/== " << attribute->thorn << "::" << attribute->routine << std::endl;
+
     const cGH *cctkGH = (const cGH *)arg1;
     if(GetMap(cctkGH) < 0) {
       CCTK_Checked_called();
       return 0;
     }
-
-    const cFunctionData *attribute = (const cFunctionData *)arg3;
-    std::cout << "/== " << attribute->thorn << "::" << attribute->routine << "\n";
 
     init_MoL();
 
@@ -302,7 +338,34 @@ namespace Read_Write_Diagnostics {
 
     init_function(attribute);
 
-    int comp = GetRefinementLevel(cctkGH) > 0 ? 1+GetLocalComponent(cctkGH) : 0;
+    int comp =  GetRefinementLevel(cctkGH);
+
+    traceVars(cctkGH);
+    #if 0
+    std::istringstream cns{getenv("DEBUG_INDEXES")};
+    int xv,yv,zv;
+    cns >> xv >> yv >> zv;
+  
+    std::istringstream ins{getenv("DEBUG_VARS")};
+    while(ins.good()) {
+      std::string vname;
+      ins >> vname;
+      //const char *vname = "ADMBASE::gxx";
+      int vi_ = CCTK_VarIndex(vname.c_str());
+      assert(vi_ >= 0);
+      int cc = CCTK_GFINDEX3D(cctkGH,xv,yv,zv);
+      CCTK_REAL *ptr = (CCTK_REAL*)CCTK_VarDataPtrI(cctkGH,0,vi_);
+      int wh = Carpet_GetValidRegion(vi_,0);
+      std::string whs;
+      if((wh & WH_INTERIOR) != 0) whs += "I";
+      if((wh & WH_BOUNDARY) != 0) whs += "B";
+      if((wh & WH_GHOSTS) != 0) whs += "G";
+      if(ptr == 0)
+        std::cout << "   " << vname << " := ??? (" << whs << ")" << std::endl;
+      else
+        std::cout << "   " << vname << " := " << ptr[cc] << " (" << whs << ")" << std::endl;
+    }
+    #endif
 
     std::set<int> variables_to_check;
     std::map<int,int>& reads_m = rclauses[routine];
@@ -415,7 +478,37 @@ namespace Read_Write_Diagnostics {
       }
     }
     wclause_diagnostic();
-    std::cout << "\\== " << attribute->thorn << "::" << attribute->routine << "\n";
+  
+  
+    traceVars(cctkGH);
+    #if 0
+    std::istringstream cns{getenv("DEBUG_INDEXES")};
+    int xv,yv,zv;
+    cns >> xv >> yv >> zv;
+
+    std::istringstream ins{getenv("DEBUG_VARS")};
+    while(ins.good()) {
+      std::string vname;
+      ins >> vname;
+      //const char *vname = "ADMBASE::gxx";
+      int vi_ = CCTK_VarIndex(vname.c_str());
+      if(vi_ < 0) std::cout << "Invalid(" << vname << ")" << std::endl;
+      assert(vi_ >= 0);
+      int cc = CCTK_GFINDEX3D(cctkGH,xv,yv,zv);
+      CCTK_REAL *ptr = (CCTK_REAL*)CCTK_VarDataPtrI(cctkGH,0,vi_);
+      int wh = Carpet_GetValidRegion(vi_,0);
+      std::string whs;
+      if((wh & WH_INTERIOR) != 0) whs += "I";
+      if((wh & WH_BOUNDARY) != 0) whs += "B";
+      if((wh & WH_GHOSTS) != 0) whs += "G";
+      if(ptr == 0)
+        std::cout << "   " << vname << " := ??? (" << whs << ")" << std::endl;
+      else
+        std::cout << "   " << vname << " := " << ptr[cc] << " (" << whs << ")" << std::endl;
+    }
+    #endif
+
+    std::cout << "\\== " << attribute->thorn << "::" << attribute->routine << std::endl;
     return 0;
   }
 
