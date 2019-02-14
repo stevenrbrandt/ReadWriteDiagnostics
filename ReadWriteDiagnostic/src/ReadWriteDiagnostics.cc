@@ -17,6 +17,8 @@ extern "C" void CCTK_Checked_called(), CCTK_Checked_reset();
 extern "C" int CCTK_Checked_get();
 
 namespace Read_Write_Diagnostics {
+  static unsigned short internet_checksum(void const *restrict const addr,
+                                          size_t const len);
   struct VarName {
     char *name;
     VarName(int vi) : name(CCTK_FullName(vi)) {}
@@ -64,8 +66,14 @@ namespace Read_Write_Diagnostics {
       if((wh & WH_GHOSTS) != 0) whs += "G";
       if(ptr == 0)
         std::cout << "   " << vname << " := ??? (" << whs << ")" << std::endl;
-      else
-        std::cout << "   " << vname << " := " << ptr[cc] << " (" << whs << ")" << std::endl;
+      else {
+        if(xv == -1 && yv == -1 && zv == -1) {
+          unsigned int cksum = internet_checksum(ptr, cctkGH->cctk_ash[0]*cctkGH->cctk_ash[1]*cctkGH->cctk_ash[2]*sizeof(CCTK_REAL));
+          std::cout << "   " << vname << " := " << cksum << " (" << whs << ")" << std::endl;
+        } else {
+          std::cout << "   " << vname << " := " << ptr[cc] << " (" << whs << ")" << std::endl;
+        }
+      }
     }
   }
 
@@ -314,6 +322,25 @@ namespace Read_Write_Diagnostics {
       }
     }
     return c;
+  }
+
+  static unsigned short internet_checksum(void const *restrict const addr,
+                                          size_t const len) {
+    unsigned long chk = 0;
+#pragma omp parallel for reduction(+ : chk)
+    for (ptrdiff_t i = 0; i < (ptrdiff_t)len; i += 2) {
+      unsigned long const lb = ((unsigned char const *)addr)[i];
+      unsigned long const ub = ((unsigned char const *)addr)[i + 1];
+      chk += lb + (ub << 8);
+    }
+    if (len % 1) {
+      unsigned long const lb = ((unsigned char const *)addr)[len - 1];
+      chk += lb;
+    }
+    while (chk >> 16) {
+      chk = (chk & 0xffffUL) + (chk >> 16);
+    }
+    return ~chk;
   }
 
   extern "C" int RDWR_pre_call(const cGH *arg1,void *arg2,const cFunctionData *arg3,void *arg4);
