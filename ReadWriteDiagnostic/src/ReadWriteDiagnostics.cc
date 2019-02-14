@@ -320,11 +320,11 @@ namespace Read_Write_Diagnostics {
   int RDWR_pre_call(const cGH *arg1,void *arg2,const cFunctionData *arg3,void *arg4)
   {
     CCTK_Checked_reset();
+    const cGH *cctkGH = (const cGH *)arg1;
 
     const cFunctionData *attribute = (const cFunctionData *)arg3;
-    std::cout << "/== " << attribute->thorn << "::" << attribute->routine << std::endl;
+    std::cout << "/== " << attribute->thorn << "::" << attribute->routine << " it=" << cctkGH->cctk_iteration << " reffact=" << cctkGH->cctk_timefac << std::endl;
 
-    const cGH *cctkGH = (const cGH *)arg1;
     if(GetMap(cctkGH) < 0) {
       CCTK_Checked_called();
       return 0;
