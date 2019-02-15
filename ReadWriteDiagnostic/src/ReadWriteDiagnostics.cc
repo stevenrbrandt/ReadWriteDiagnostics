@@ -202,11 +202,12 @@ namespace Read_Write_Diagnostics {
     for(int vi=0;vi<nv;vi++) {
       int type = CCTK_GroupTypeFromVarI(vi);
       if(type == CCTK_GF && CCTK_VarTypeSize(CCTK_VarTypeI(vi)) == sizeof(CCTK_REAL)) {
-        int rhsi = MoLQueryEvolvedRHS(vi);
+        int rhsi = CCTK_IsFunctionAliased("MoLQueryEvolvedRHS") ? MoLQueryEvolvedRHS(vi) : -1;
         if(rhsi >= 0) {
           writes_add[vi] = WH_INTERIOR;
           writes_copy[vi] = WH_INTERIOR;
-          writes_rhs[rhsi] = WH_INTERIOR;
+          if(rhsi >= 0)
+            writes_rhs[rhsi] = WH_INTERIOR;
           init = false;
         }
       }
