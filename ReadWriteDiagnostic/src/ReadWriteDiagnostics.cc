@@ -614,7 +614,7 @@ namespace Read_Write_Diagnostics {
     }
   }
 
-  extern "C" int RDWR_ZeroInit_Storage(CCTK_ARGUMENTS) {
+  extern "C" void RDWR_ZeroInit_Storage(CCTK_ARGUMENTS) {
     DECLARE_CCTK_ARGUMENTS;
     DECLARE_CCTK_PARAMETERS;
     std::vector<std::string> vec{};
@@ -632,10 +632,9 @@ namespace Read_Write_Diagnostics {
           CCTK_EnableGroupStorageI(cctkGH,group);
       }
     }
-    return 0;
   } // end
 
-  extern "C" int RDWR_ZeroInit(CCTK_ARGUMENTS) {
+  extern "C" void RDWR_ZeroInit(CCTK_ARGUMENTS) {
     DECLARE_CCTK_ARGUMENTS;
     DECLARE_CCTK_PARAMETERS;
     std::vector<std::string> vec{};
@@ -675,7 +674,6 @@ namespace Read_Write_Diagnostics {
         std::cout << "Zero_init of " << out << " to Everywhere\n";
       }
     }
-    return 0;
   } // end
 
 }
