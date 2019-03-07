@@ -65,13 +65,13 @@ namespace Read_Write_Diagnostics {
       if((wh & WH_BOUNDARY) != 0) whs += "B";
       if((wh & WH_GHOSTS) != 0) whs += "G";
       if(ptr == 0)
-        std::cout << "   " << vname << " := ??? (" << whs << ")" << std::endl;
+        std::cout << " RDWR:  " << vname << " := ??? (" << whs << ")" << std::endl;
       else {
         if(xv == -1 && yv == -1 && zv == -1) {
           unsigned int cksum = internet_checksum(ptr, cctkGH->cctk_ash[0]*cctkGH->cctk_ash[1]*cctkGH->cctk_ash[2]*sizeof(CCTK_REAL));
-          std::cout << "   " << vname << " := " << cksum << " (" << whs << ")" << std::endl;
+          std::cout << " RDWR:  " << vname << " := " << cksum << " (" << whs << ")" << std::endl;
         } else {
-          std::cout << "   " << vname << " := " << ptr[cc] << " (" << whs << ")" << std::endl;
+          std::cout << " RDWR:  " << vname << " := " << ptr[cc] << " (" << whs << ")" << std::endl;
         }
       }
     }
@@ -137,7 +137,7 @@ namespace Read_Write_Diagnostics {
       const char *closep = strchr(clause,')');
       const char *end_impl = strchr(clause,':');
       if(end_impl == 0) {
-        std::cerr << "bad str=" << strings[i] << std::endl;
+        std::cerr << "RDWR: bad str=" << strings[i] << std::endl;
       }
       assert(end_impl != 0);
       std::string where, str;
@@ -180,7 +180,7 @@ namespace Read_Write_Diagnostics {
             routine_m[vi] = where_val;
           }
         } else {
-          std::cerr << "error: Could not find (" << str << ")" << std::endl;
+          std::cerr << "RDWR: Could not find (" << str << ") using CCTK_VarIndex or CCTK_GroupIndex" << std::endl;
         }
       }
     }
@@ -273,7 +273,7 @@ namespace Read_Write_Diagnostics {
             msg << ")";
             */
           } else if(v->second != vfind->second) {
-            msg << "error: Routine " << routine << "() has "
+            msg << "RDWR error: Routine " << routine << "() has "
               << "incorrect region for region of "
               << "writes clause for " << vn << ": " 
               << " schedule=" << wh_name(vfind->second)
@@ -466,7 +466,7 @@ namespace Read_Write_Diagnostics {
     const cGH *cctkGH = (const cGH *)arg1;
     const cFunctionData *attribute = (const cFunctionData *)arg3;
     if(CCTK_Checked_get() == 0) {
-      std::cout << "xxxy: No check called for " << attribute->thorn << "::" << attribute->routine << "\n";
+      std::cout << "RDWR: No check called for " << attribute->thorn << "::" << attribute->routine << "\n";
     }
     CCTK_Checked_reset();
 
@@ -578,7 +578,7 @@ namespace Read_Write_Diagnostics {
 
   extern "C" int RDWR_AddDiagnosticCalls(void) {
     Carpet::Carpet_RegisterScheduleWrapper((Carpet::func)RDWR_pre_call,(Carpet::func)RDWR_post_call);
-    std::cout << "Hooks added" << std::endl;
+    std::cout << "RDWR: Hooks added" << std::endl;
     return 0;
   }
 
@@ -615,12 +615,12 @@ namespace Read_Write_Diagnostics {
     {
       int var = CCTK_VarIndex(out.c_str());
       if(var < 0) {
-        std::cout << "Zero_init skips (" << out << ") no such variable.\n";
+        std::cout << "RDWR: Zero_init skips (" << out << ") no such variable.\n";
         continue;
       }
       int group = CCTK_GroupIndexFromVarI(var);
       if(group >= 0) {
-          std::cout << "Turn on group storage\n";
+          std::cout << "RDWR: Turn on group storage\n";
           CCTK_EnableGroupStorageI(cctkGH,group);
       }
     }
@@ -636,20 +636,20 @@ namespace Read_Write_Diagnostics {
     {
       int var = CCTK_VarIndex(out.c_str());
       if(var < 0) {
-        std::cout << "Zero_init skips " << out << " no such variable.\n";
+        std::cout << "RDWR: Zero_init skips " << out << " no such variable.\n";
         continue;
       }
       void *data = CCTK_VarDataPtrI(cctkGH,0,var);
       if(data == nullptr) {
         int group = CCTK_GroupIndexFromVarI(var);
         if(group >= 0) {
-          std::cout << "Turn on group storage\n";
+          std::cout << "RDWR: Turn on group storage\n";
           CCTK_EnableGroupStorageI(cctkGH,group);
         }
       }
       data = CCTK_VarDataPtrI(cctkGH,0,var);
       if(data == 0) {
-        std::cout << "Zero_init skips " << out << " nullptr.\n";
+        std::cout << "RDWR: Zero_init skips " << out << " nullptr.\n";
         continue;
       }
       int type = CCTK_GroupTypeFromVarI(var);
