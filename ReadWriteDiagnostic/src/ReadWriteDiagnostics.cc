@@ -576,12 +576,12 @@ namespace Read_Write_Diagnostics {
     }
   }
 
-  extern "C" int RDWR_ShowDiagnostics(void) {
+  extern "C" void RDWR_ShowDiagnostics(CCTK_ARGUMENTS) {
     std::cerr << "RDWR Diagnostics:" << std::endl;
     for(auto i=messages.begin();i != messages.end();++i) {
       std::cerr << *i << std::endl;
     }
-    return 0;
+    return;
   }
 
   extern "C" int RDWR_AddDiagnosticCalls(void) {
