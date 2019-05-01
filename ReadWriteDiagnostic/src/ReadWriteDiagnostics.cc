@@ -55,15 +55,23 @@ namespace Read_Write_Diagnostics {
       std::string vname;
       ins >> vname;
       //const char *vname = "ADMBASE::gxx";
+      int tl = 0;
+      while(vname.rfind("_p") == vname.size()-2) {
+        tl += 1;
+        vname = vname.erase(vname.size()-2);
+      }
       int vi_ = CCTK_VarIndex(vname.c_str());
       assert(vi_ >= 0);
       int cc = CCTK_GFINDEX3D(cctkGH,xv,yv,zv);
-      CCTK_REAL *ptr = (CCTK_REAL*)CCTK_VarDataPtrI(cctkGH,0,vi_);
-      int wh = Carpet_GetValidRegion(vi_,0);
+      CCTK_REAL *ptr = (CCTK_REAL*)CCTK_VarDataPtrI(cctkGH,tl,vi_);
+      int wh = Carpet_GetValidRegion(vi_,tl);
       std::string whs;
       if((wh & WH_INTERIOR) != 0) whs += "I";
       if((wh & WH_BOUNDARY) != 0) whs += "B";
       if((wh & WH_GHOSTS) != 0) whs += "G";
+      // add the _p's back
+      for(int i = 0 ; i < tl ; ++i)
+        vname += "_p";
       if(ptr == 0)
         std::cout << " RDWR:  " << vname << " := ??? (" << whs << ")" << std::endl;
       else {
@@ -606,7 +614,7 @@ namespace Read_Write_Diagnostics {
     }
   }
 
-  extern "C" int RDWR_ZeroInit_Storage(CCTK_ARGUMENTS) {
+  extern "C" void RDWR_ZeroInit_Storage(CCTK_ARGUMENTS) {
     DECLARE_CCTK_ARGUMENTS;
     DECLARE_CCTK_PARAMETERS;
     std::vector<std::string> vec{};
@@ -624,10 +632,9 @@ namespace Read_Write_Diagnostics {
           CCTK_EnableGroupStorageI(cctkGH,group);
       }
     }
-    return 0;
   } // end
 
-  extern "C" int RDWR_ZeroInit(CCTK_ARGUMENTS) {
+  extern "C" void RDWR_ZeroInit(CCTK_ARGUMENTS) {
     DECLARE_CCTK_ARGUMENTS;
     DECLARE_CCTK_PARAMETERS;
     std::vector<std::string> vec{};
@@ -667,7 +674,6 @@ namespace Read_Write_Diagnostics {
         std::cout << "Zero_init of " << out << " to Everywhere\n";
       }
     }
-    return 0;
   } // end
 
 }
