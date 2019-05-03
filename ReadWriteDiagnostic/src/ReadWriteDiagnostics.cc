@@ -159,12 +159,14 @@ namespace Read_Write_Diagnostics {
 
         if(where == "everywhere") {
           where_val = WH_EVERYWHERE;
+        } else if(where == "interiorwithboundary") {
+          where_val = WH_INTERIOR | WH_BOUNDARY;
         } else if(where == "interior") {
           where_val = WH_INTERIOR;
         } else if(where == "exterior") {
           where_val = WH_EXTERIOR;
         } else if(where == "boundary") {
-          where_val = WH_EXTERIOR;
+          where_val = WH_BOUNDARY;
         } else {
           std::cout << "error in where clause for " << str << "=" << where << std::endl;
           assert(false);
