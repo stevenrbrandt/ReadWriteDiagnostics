@@ -8,6 +8,7 @@
 #include <cctk_Sync.h>
 #include <cctk_Arguments.h>
 #include <cctk_Parameters.h>
+#include <cctk_Functions.h>
 #include <sstream>
 #include <stdlib.h>
 
@@ -130,13 +131,21 @@ namespace Read_Write_Diagnostics {
   }
 
   // Writes, Reads, Syncs
-  std::map<std::string,std::map<int,int> > wclauses, rclauses;
+  struct var_tuple {
+    int vi, tl;
+    bool operator<(const var_tuple& b) const {
+      if(vi != b.vi) return vi < b.vi;
+      else if(tl != b.tl) return tl < b.tl;
+      else return false;
+    }
+  };
+  std::map<std::string,std::map<var_tuple,int> > wclauses, rclauses;
   std::map<std::string,std::set<int> > syncs;
   std::map<int,std::map<int,std::string> > track_syncs;
 
   std::string routine;
 
-  void compute_clauses(const int num_strings,const char **strings,std::map<int,int>& routine_m) {
+  void compute_clauses(const int num_strings,const char **strings,std::map<var_tuple,int>& routine_m) {
     for(int i=0;i< num_strings; ++i) {
 
       // Parse the where clause (if any)
@@ -176,9 +185,17 @@ namespace Read_Write_Diagnostics {
         where_val = WH_EVERYWHERE;
       }
 
+      int tl = 0;
+      // strip _p from varname converting it to tl
+      while(str.rfind("_p") == str.size()-2) {
+        tl += 1;
+        str = str.erase(str.size()-2);
+      }
+
       int vi = CCTK_VarIndex(str.c_str());
       if(vi >= 0) {
-        routine_m[vi] = where_val;
+        var_tuple vt{vi,tl};
+        routine_m[vt] = where_val;
       } else {
         // If looking up a specific variable failed, then
         // we lookup everything on the group.
@@ -187,7 +204,8 @@ namespace Read_Write_Diagnostics {
           int i0 = CCTK_FirstVarIndexI(gi);
           int iN = i0+CCTK_NumVarsInGroupI(gi);
           for(vi=i0;vi<iN;vi++) {
-            routine_m[vi] = where_val;
+            var_tuple vt{vi,tl};
+            routine_m[vt] = where_val;
           }
         } else {
           std::cerr << "RDWR: Could not find (" << str << ") using CCTK_VarIndex or CCTK_GroupIndex" << std::endl;
@@ -201,23 +219,26 @@ namespace Read_Write_Diagnostics {
     bool init = true;
     if(!init) return;
     std::string add = "MoL::MoL_Add";
-    std::map<int,int>& writes_add = wclauses[add];
+    std::map<var_tuple,int>& writes_add = wclauses[add];
     std::string copy = "MoL::MoL_InitialCopy";
-    std::map<int,int>& writes_copy = wclauses[copy];
+    std::map<var_tuple,int>& writes_copy = wclauses[copy];
     std::string rhs = "MoL::MoL_InitRHS";
-    std::map<int,int>& writes_rhs = wclauses[rhs];
+    std::map<var_tuple,int>& writes_rhs = wclauses[rhs];
     if(routine != add && routine != copy && routine != rhs)
       return;
     int nv = CCTK_NumVars();
     for(int vi=0;vi<nv;vi++) {
+      var_tuple vt{vi,0};
       int type = CCTK_GroupTypeFromVarI(vi);
       if(type == CCTK_GF && CCTK_VarTypeSize(CCTK_VarTypeI(vi)) == sizeof(CCTK_REAL)) {
         int rhsi = CCTK_IsFunctionAliased("MoLQueryEvolvedRHS") ? MoLQueryEvolvedRHS(vi) : -1;
         if(rhsi >= 0) {
-          writes_add[vi] = WH_INTERIOR;
-          writes_copy[vi] = WH_INTERIOR;
-          if(rhsi >= 0)
-            writes_rhs[rhsi] = WH_INTERIOR;
+          writes_add[vt] = WH_INTERIOR;
+          writes_copy[vt] = WH_INTERIOR;
+          if(rhsi >= 0) {
+            var_tuple rhst{rhsi,0};
+            writes_rhs[rhst] = WH_INTERIOR;
+          }
           init = false;
         }
       }
@@ -228,12 +249,12 @@ namespace Read_Write_Diagnostics {
     if(wclauses.find(routine) != wclauses.end())
       return;
 
-    std::map<int,int>& writes_m = wclauses[routine];
+    std::map<var_tuple,int>& writes_m = wclauses[routine];
     compute_clauses(
       attribute->n_WritesClauses,
       attribute->WritesClauses,
       writes_m);
-    std::map<int,int>& reads_m = rclauses[routine];
+    std::map<var_tuple,int>& reads_m = rclauses[routine];
     compute_clauses(
       attribute->n_ReadsClauses,
       attribute->ReadsClauses,
@@ -251,23 +272,23 @@ namespace Read_Write_Diagnostics {
   }
 
   // routine -> var_index -> where_val
-  std::map<std::string,std::map<int,int> > observed_writes;
+  std::map<std::string,std::map<var_tuple,int> > observed_writes;
   // Compare observed writes to what is specified in schedule.ccl
   void wclause_diagnostic() {
     for(auto it=observed_writes.begin();it != observed_writes.end(); ++it) {
       const std::string& routine = it->first;
       for(auto v=it->second.begin();v != it->second.end();++v) {
-        int vi = v->first;
-        //std::string imp = CCTK_ImpFromVarI(vi);
+        var_tuple vt = v->first;
+        //std::string imp = CCTK_ImpFromVarI(vt.vi);
         auto wfind = wclauses.find(routine);
         std::ostringstream msg;
         if(wfind == wclauses.end()) {
           msg << "error: " << routine << "() has no write clauses";
         } else {
-          auto vfind = wfind->second.find(vi);
-          VarName vn(vi);
+          auto vfind = wfind->second.find(vt);
+          VarName vn(vt.vi);
           if(vfind == wfind->second.end()) {
-            int where = Carpet_GetValidRegion(vi,0);
+            int where = Carpet_GetValidRegion(vt.vi,vt.tl);
             int missing = v->second & ~where;
             missing &= ~WH_GHOSTS;
             if(missing != 0) {
@@ -275,7 +296,7 @@ namespace Read_Write_Diagnostics {
                 << vn << "(" << wh_name(missing) << ") ";
             }
             /*
-            msg << "id=" << vi << " ";
+            msg << "id=" << vt.vi << " ";
             msg << "has=(";
             for(auto m=wfind->second.begin();m != wfind->second.end();++m) {
               msg << m->first << " ";
@@ -361,7 +382,7 @@ namespace Read_Write_Diagnostics {
     const cGH *cctkGH = (const cGH *)arg1;
 
     const cFunctionData *attribute = (const cFunctionData *)arg3;
-    std::cout << "/== " << attribute->thorn << "::" << attribute->routine << " it=" << cctkGH->cctk_iteration << " reffact=" << cctkGH->cctk_timefac << std::endl;
+    std::cout << "/== " << attribute->thorn << "::" << attribute->routine << " it=" << cctkGH->cctk_iteration << " reffact=" << cctkGH->cctk_timefac << " tl=" << GetTimeLevel(cctkGH) << std::endl;
 
     if(GetMap(cctkGH) < 0) {
       CCTK_Checked_called();
@@ -405,17 +426,17 @@ namespace Read_Write_Diagnostics {
     }
     #endif
 
-    std::set<int> variables_to_check;
-    std::map<int,int>& reads_m = rclauses[routine];
+    std::set<var_tuple> variables_to_check;
+    std::map<var_tuple,int>& reads_m = rclauses[routine];
     std::set<int> syncs_s = syncs[routine];
     for(auto i=reads_m.begin();i != reads_m.end();++i) {
       if(i->second == (WH_INTERIOR|WH_EXTERIOR)) {
-        std::string r = track_syncs[comp][i->first];
+        std::string r = track_syncs[comp][i->first.vi]; // TODO: track SYNC on past timelevels?
         if(r != "") {
           std::ostringstream msg;
-          VarName vn(i->first);
+          VarName vn(i->first.vi);
           msg << "error: in routine " << routine << ". Variable " << vn <<
-            " (group " << CCTK_GroupNameFromVarI(i->first) << ") needs to be synced by " << r;
+            " (group " << CCTK_GroupNameFromVarI(i->first.vi) << " tl=" << i->first.tl << ") needs to be synced by " << r;
           messages.insert(msg.str());
 
           // Fix syncs
@@ -428,12 +449,12 @@ namespace Read_Write_Diagnostics {
       }
       variables_to_check.insert(i->first);
     }
-    std::map<int,int>& writes_m = wclauses[routine];
+    std::map<var_tuple,int>& writes_m = wclauses[routine];
     for(auto i=writes_m.begin();i != writes_m.end();++i) {
       if(i->second == WH_INTERIOR) {
-        track_syncs[comp][i->first]=routine;
+        track_syncs[comp][i->first.vi]=routine;
       } else if(i->second == (WH_INTERIOR|WH_EXTERIOR)) {
-        track_syncs[comp][i->first]="";
+        track_syncs[comp][i->first.vi]="";
       }
       variables_to_check.insert(i->first);
     }
@@ -452,13 +473,15 @@ namespace Read_Write_Diagnostics {
     // No read-write clauses. Check everything.
     if(variables_to_check.size()==0) {
       for(int vi=0;vi < CCTK_NumVars();vi++) {
-        variables_to_check.insert(vi);
+        var_tuple vt{vi,0}; // TODO: check other timelevels as well?
+        variables_to_check.insert(vt);
       }
     }
 
     for(auto i = variables_to_check.begin();i != variables_to_check.end();++i) {
-       int vi = *i;
-       void *data = CCTK_VarDataPtrI(cctkGH,0,vi);
+       int vi = i->vi;
+       int tl = i->tl;
+       void *data = CCTK_VarDataPtrI(cctkGH,tl,vi);
        if(data == 0) continue;
        int type = CCTK_GroupTypeFromVarI(vi);
        if(type == CCTK_GF && CCTK_VarTypeSize(CCTK_VarTypeI(vi)) == sizeof(CCTK_REAL)) {
@@ -480,25 +503,27 @@ namespace Read_Write_Diagnostics {
     }
     CCTK_Checked_reset();
 
-    std::set<int> variables_to_check;
-    std::map<int,int>& reads_m = rclauses[routine];
+    std::set<var_tuple> variables_to_check;
+    std::map<var_tuple,int>& reads_m = rclauses[routine];
     for(auto i=reads_m.begin();i != reads_m.end();++i) {
       variables_to_check.insert(i->first);
     }
-    std::map<int,int>& writes_m = wclauses[routine];
+    std::map<var_tuple,int>& writes_m = wclauses[routine];
     for(auto i=writes_m.begin();i != writes_m.end();++i) {
       variables_to_check.insert(i->first);
     }
     // No read-write clause. Check everything.
     if(variables_to_check.size()==0) {
       for(int vi=0;vi < CCTK_NumVars();vi++) {
-        variables_to_check.insert(vi);
+        var_tuple vt{vi,0}; // TODO: should I check all timelevels?
+        variables_to_check.insert(vt);
       }
     }
 
     for(auto i = variables_to_check.begin();i != variables_to_check.end();++i) {
-       int vi = *i;
-       void *data = CCTK_VarDataPtrI(cctkGH,0,vi);
+       int vi = i->vi;
+       int tl = i->tl;
+       void *data = CCTK_VarDataPtrI(cctkGH,tl,vi);
        if(data == 0) continue;
        int type = CCTK_GroupTypeFromVarI(vi);
        if(type == CCTK_GF && CCTK_VarTypeSize(CCTK_VarTypeI(vi)) == sizeof(CCTK_REAL)) {
@@ -511,7 +536,7 @@ namespace Read_Write_Diagnostics {
             where |= WH_EXTERIOR;
           if(cn.in != c.in)
             where |= WH_INTERIOR;
-          observed_writes[routine][vi] |= where;
+          observed_writes[routine][*i] |= where;
         }
       }
     }
@@ -552,11 +577,12 @@ namespace Read_Write_Diagnostics {
 
   extern "C" void *RDWR_VarDataPtrI(const cGH *gh,int tl,int vi) {
     bool found = false;
-    std::map<int,int>& reads_m = rclauses[routine];
+    std::map<var_tuple,int>& reads_m = rclauses[routine];
     //int read_mask = 0;
-    if(reads_m.find(vi) == reads_m.end()) {
-      std::map<int,int>& writes_m = wclauses[routine];
-      if(writes_m.find(vi) == writes_m.end()) {
+    var_tuple vt{vi,tl};
+    if(reads_m.find(vt) == reads_m.end()) {
+      std::map<var_tuple,int>& writes_m = wclauses[routine];
+      if(writes_m.find(vt) == writes_m.end()) {
         ; // not found in either reads or writes
       } else {
         found = true;

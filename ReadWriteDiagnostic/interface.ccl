@@ -32,3 +32,8 @@ void FUNCTION Carpet_SetValidRegion(CCTK_INT IN vi,
                                         CCTK_INT IN tl,
                                         CCTK_INT IN wh)
 USES FUNCTION Carpet_SetValidRegion
+
+CCTK_INT FUNCTION                         \
+    GetTimeLevel                          \
+        (CCTK_POINTER_TO_CONST IN cctkGH)
+REQUIRES FUNCTION GetTimeLevel
