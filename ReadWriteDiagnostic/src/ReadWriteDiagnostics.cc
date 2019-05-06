@@ -62,6 +62,9 @@ namespace Read_Write_Diagnostics {
         vname = vname.erase(vname.size()-2);
       }
       int vi_ = CCTK_VarIndex(vname.c_str());
+      if(vi_ < 0 ) {
+        CCTK_VERROR("Unknown variable name: %s", vname.c_str());
+      }
       assert(vi_ >= 0);
       int cc = CCTK_GFINDEX3D(cctkGH,xv,yv,zv);
       CCTK_REAL *ptr = (CCTK_REAL*)CCTK_VarDataPtrI(cctkGH,tl,vi_);
