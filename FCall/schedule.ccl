@@ -1,0 +1,6 @@
+# Schedule definitions for thorn Trace
+
+schedule FCall_AddDiagnosticCalls at CCTK_STARTUP
+{
+  LANG: C
+} "Add diagnostic calls to Carpet"

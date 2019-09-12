@@ -1,0 +1,15 @@
+# Interface definition for thorn FCALL
+implements: fcall
+inherits: 
+
+CCTK_INT \
+FUNCTION RegisterScheduleWrapper \
+  (CCTK_INT IN CCTK_FPOINTER func_before (CCTK_POINTER_TO_CONST IN cctkGH,    \
+                                          CCTK_POINTER          IN function,  \
+                                          CCTK_POINTER          IN attribute, \
+                                          CCTK_POINTER          IN data),     \
+   CCTK_INT IN CCTK_FPOINTER func_after  (CCTK_POINTER_TO_CONST IN cctkGH,    \
+                                          CCTK_POINTER          IN function,  \
+                                          CCTK_POINTER          IN attribute, \
+                                          CCTK_POINTER          IN data))
+REQUIRES FUNCTION RegisterScheduleWrapper 
